@@ -4,7 +4,7 @@ let lockouts = JSON.parse(localStorage.getItem('lockouts')) || {}, attempts = JS
 let teamName = localStorage.getItem('teamName') || "", startTime = localStorage.getItem('startTime');
 let currentTask = null, hintTimerInterval, lockoutTimerInterval;
 
-const sounds = { success: new Audio('success.wav'), error: new Audio('error.wav'), lockout: new Audio('lockout.wav') };
+const sounds = { success: new Audio('sounds/success.wav'), error: new Audio('sounds/error.wav'), lockout: new Audio('sounds/lockout.wav') };
 
 function parseTasks() {
     allTasks = EMBEDDED_TASKS.split('\n').filter(l => l.trim() !== "").map(line => {
@@ -179,3 +179,4 @@ function handleAdminTap() {
     }
 
 }
+
