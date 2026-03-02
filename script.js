@@ -4,7 +4,7 @@ let lockouts = JSON.parse(localStorage.getItem('lockouts')) || {}, attempts = JS
 let teamName = localStorage.getItem('teamName') || "", startTime = localStorage.getItem('startTime');
 let currentTask = null, hintTimerInterval, lockoutTimerInterval;
 
-const sounds = { success: new Audio('sounds/success.wav'), error: new Audio('sounds/error.wav'), lockout: new Audio('sounds/lockout.wav') };
+const sounds = { success: new Audio('success.wav'), error: new Audio('error.wav'), lockout: new Audio('lockout.wav') };
 
 function parseTasks() {
     allTasks = EMBEDDED_TASKS.split('\n').filter(l => l.trim() !== "").map(line => {
@@ -138,45 +138,3 @@ function downloadResults() {
 }
 
 function resetGame() { if (confirm("Reset?")) { localStorage.clear(); location.reload(); } }
-
-// Hidden Admin Function: Skip the current task
-function adminSkipTask() {
-    const adminCode = prompt("Enter Game Master Override Code:");
-    
-    // You can change '1337' to any secret number/word you like
-    if (adminCode === "1337") {
-        playSound('success');
-        completedTasks.push(currentTask.id);
-        localStorage.setItem('completedTasks', JSON.stringify(completedTasks));
-        
-        // Remove any penalties or lockout data for this task
-        delete attempts[currentTask.id];
-        delete lockouts[currentTask.id];
-        localStorage.setItem('attempts', JSON.stringify(attempts));
-        localStorage.setItem('lockouts', JSON.stringify(lockouts));
-
-        closeModal();
-        renderHub();
-        alert("Task bypassed by Game Master.");
-    } else {
-        alert("Invalid Admin Code.");
-    }
-}
-
-let adminTapCount = 0;
-let adminTapTimer;
-
-function handleAdminTap() {
-    adminTapCount++;
-    clearTimeout(adminTapTimer);
-    
-    if (adminTapCount >= 5) {
-        adminTapCount = 0;
-        adminSkipTask();
-    } else {
-        // Reset count if they don't tap fast enough (within 2 seconds)
-        adminTapTimer = setTimeout(() => { adminTapCount = 0; }, 2000);
-    }
-
-}
-
