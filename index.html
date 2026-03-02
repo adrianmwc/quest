@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>The Amazing Race: Offline</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <script>
+        const EMBEDDED_TASKS = `
+1|The Fountain Riddle|100|WATER|Go to the main fountain and count the stone frogs.|The frogs are near the base.
+2|Statue Search|150|1892|Find the statue of the founder. What year is on the plaque?|Check the back of the stone base.
+3|Library Secret|200|BOOKWORM|Find the 'Local History' section. The code is in the red book.|Look for the author "Smith".
+4|Museum Mystery|250|BELL|When the lesson starts|Check the middle.
+        `;
+    </script>
+
+    <div id="welcome-screen">
+        <div class="welcome-box">
+	    <img src="images/icon.png" alt="Main image" width="96" height="96">
+            <h1>THE AMAZING RACE</h1>
+            <input type="text" id="team-name-input" placeholder="Enter Team Name...">
+            <br><br>
+            <button onclick="startRace()">START RACE</button>
+        </div>
+    </div>
+
+    <div id="game-container">
+        <header>
+            <div>Team: <span id="team-name-display"></span></div>
+            <div>Score: <span id="score">0</span></div>
+        </header>
+        <div id="task-list"></div>
+        <footer>
+            <button onclick="resetGame()" class="reset-btn">Reset Progress</button>
+        </footer>
+    </div>
+
+    <div id="task-modal" style="display:none;">
+        <div class="modal-content">
+            <h2 id="modal-title"></h2>
+	    <h2 id="modal-title" onclick="handleAdminTap()">Task Title</h2>
+            <p id="modal-clue"></p>
+            <div id="input-section">
+                <input type="text" id="passcode-input" placeholder="CODE">
+                <button onclick="submitPasscode()" class="action-btn">SUBMIT</button>
+            </div>
+            <div id="lockout-section" style="display:none; color:red;">
+                <h3>LOCKED</h3>
+                <div id="timer-display" style="font-size:2rem;">02:00</div>
+            </div>
+            <div id="hint-container">
+                <button id="hint-button" onclick="revealHint()" style="display:none;">HINT (-25 Pts)</button>
+                <p id="hint-text" style="display:none;"></p>
+            </div>
+            <button onclick="closeModal()" class="back-btn">BACK</button>
+        </div>
+    </div>
+
+    <div id="pit-stop-screen" style="display:none;">
+        <div class="pit-stop-content">
+            <h1>PIT STOP: CHECKED IN</h1>
+            <h3 id="final-team-name"></h3>
+            <p id="final-time-display"></p>
+            <h2 id="final-total-points"></h2>
+            <table id="summary-table">
+                <thead><tr><th>Mission</th><th>Pts</th></tr></thead>
+                <tbody id="summary-body"></tbody>
+            </table>
+            <button onclick="downloadResults()" style="background:#2196F3; color:white;">SAVE RESULTS</button>
+            <button onclick="resetGame()" class="reset-btn">NEW GAME</button>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
