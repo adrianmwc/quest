@@ -4,7 +4,7 @@ let lockouts = JSON.parse(localStorage.getItem('lockouts')) || {}, attempts = JS
 let teamName = localStorage.getItem('teamName') || "", startTime = localStorage.getItem('startTime');
 let currentTask = null, hintTimerInterval, lockoutTimerInterval;
 
-const sounds = { success: new Audio('success.mp3'), error: new Audio('error.mp3'), lockout: new Audio('lockout.mp3') };
+const sounds = { success: new Audio('success.wav'), error: new Audio('error.wav'), lockout: new Audio('lockout.wav') };
 
 function parseTasks() {
     allTasks = EMBEDDED_TASKS.split('\n').filter(l => l.trim() !== "").map(line => {
@@ -177,4 +177,5 @@ function handleAdminTap() {
         // Reset count if they don't tap fast enough (within 2 seconds)
         adminTapTimer = setTimeout(() => { adminTapCount = 0; }, 2000);
     }
+
 }
