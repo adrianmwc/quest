@@ -1,5 +1,5 @@
 // 1. Update the version name whenever you change files (e.g., v1 to v2)
-const CACHE_NAME = 'race-v2';
+const CACHE_NAME = 'race-v3';
 
 // 2. List every single file the iPad needs to work without Wi-Fi
 const ASSETS = [
@@ -51,4 +51,5 @@ self.addEventListener('fetch', (event) => {
       return response || fetch(event.request);
     })
   );
+
 });
