@@ -1,267 +1,199 @@
-/**
- * AMAZING RACE: OFFLINE EDITION - MASTER SCRIPT
- * Features: Embedded Data, .wav Audio, Vibration, Admin Skip, Offline Result Saving
- */
-
-// --- 1. CONFIGURATION & STATE ---
 let allTasks = [];
 let completedTasks = JSON.parse(localStorage.getItem('completedTasks')) || [];
 let hintsUsed = JSON.parse(localStorage.getItem('hintsUsed')) || [];
-let firstOpenedAt = JSON.parse(localStorage.getItem('firstOpenedAt')) || {};
+let bypassedTasks = JSON.parse(localStorage.getItem('bypassedTasks')) || []; // Track zero-point tasks
 let lockouts = JSON.parse(localStorage.getItem('lockouts')) || {};
 let attempts = JSON.parse(localStorage.getItem('attempts')) || {};
 let teamName = localStorage.getItem('teamName') || "";
 let startTime = localStorage.getItem('startTime');
-
 let currentTask = null;
-let hintTimerInterval;
-let lockoutTimerInterval;
 let adminTapCount = 0;
 let adminTapTimer;
 
-// Audio Files (Pointing to your 'sounds/' folder and .wav format)
 const sounds = {
     success: new Audio('sounds/success.wav'),
     error: new Audio('sounds/error.wav'),
     lockout: new Audio('sounds/lockout.wav')
 };
 
-// --- 2. INITIALIZATION ---
-window.onload = function() {
-    // Register Service Worker for offline caching
-    if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('sw.js');
-    }
-
-    // Parse the data embedded in index.html
-    parseEmbeddedTasks();
-
-    // If a game is already in progress, skip the welcome screen
-    if (teamName) {
-        document.getElementById('welcome-screen').style.display = 'none';
-        document.getElementById('team-name-display').innerText = teamName;
-        renderHub();
-    }
-};
-
-function parseEmbeddedTasks() {
-    allTasks = EMBEDDED_TASKS.split('\n')
-        .filter(line => line.trim() !== "")
-        .map(line => {
-            const [id, title, pts, code, clue, hint] = line.split('|');
-            return { 
-                id: id.trim(), 
-                title: title.trim(), 
-                points: parseInt(pts), 
-                passcode: code.trim(), 
-                clue: clue.trim(), 
-                hint: hint ? hint.trim() : "No hint available." 
-            };
-        });
+function parseTasks() {
+    allTasks = EMBEDDED_TASKS.trim().split('\n').map(line => {
+        const p = line.split('|');
+        return { 
+            id: p[0], title: p[1], pts: parseInt(p[2]), 
+            code: p[3], clue: p[4], hint: p[5], img: p[6] 
+        };
+    });
 }
 
-// --- 3. CORE GAME FLOW ---
 function startRace() {
-    const input = document.getElementById('team-name-input').value.trim();
-    if (!input) return alert("Enter a team name!");
+    const nameInput = document.getElementById('team-name-input').value.trim();
+    if (!nameInput) return alert("Enter Team Name!");
     
-    teamName = input;
-    startTime = Date.now();
+    teamName = nameInput;
+    startTime = startTime || Date.now(); // Don't reset time if resuming
     localStorage.setItem('teamName', teamName);
     localStorage.setItem('startTime', startTime);
     
-    // iOS Audio Wake-up (Enables sound playback after user interaction)
-    Object.values(sounds).forEach(s => {
-        s.play().then(() => { s.pause(); s.currentTime = 0; }).catch(() => {});
-    });
-
-    document.getElementById('team-name-display').innerText = teamName;
-    document.getElementById('welcome-screen').style.display = 'none';
+    Object.values(sounds).forEach(s => { s.play().then(() => { s.pause(); s.currentTime = 0; }).catch(()=>{}); });
     renderHub();
 }
 
 function renderHub() {
-    const hub = document.getElementById('task-list');
-    let totalScore = 0;
+    parseTasks();
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById('game-hub').classList.add('active');
+    document.getElementById('team-name-display').innerText = teamName;
 
-    if (allTasks.length > 0 && completedTasks.length === allTasks.length) {
+    if (completedTasks.length === allTasks.length && allTasks.length > 0) {
         showPitStop();
         return;
     }
 
-    hub.innerHTML = '';
-    allTasks.forEach(task => {
-        const isDone = completedTasks.includes(task.id);
-        if (isDone) {
-            let pts = task.points;
-            if (hintsUsed.includes(task.id)) pts -= 25;
-            totalScore += pts;
-        }
+    const list = document.getElementById('task-list');
+    list.innerHTML = '';
+    let currentScore = 0;
 
-        hub.innerHTML += `
+    allTasks.forEach(t => {
+        const isDone = completedTasks.includes(t.id);
+        const isBypassed = bypassedTasks.includes(t.id);
+        
+        if (isDone && !isBypassed) {
+            currentScore += (hintsUsed.includes(t.id) ? t.pts - 25 : t.pts);
+        }
+        
+        list.innerHTML += `
             <div class="task-card ${isDone ? 'completed' : ''}">
-                <div>
-                    <strong>${task.title}</strong><br>
-                    <small>${task.points} Pts</small>
-                </div>
-                <button onclick="openTask('${task.id}')">${isDone ? 'DONE' : 'GO'}</button>
-            </div>
-        `;
+                <div><b>${t.title}</b><br><small>${isBypassed ? '0' : t.pts} Pts</small></div>
+                <button onclick="openTask('${t.id}')">${isDone ? 'DONE' : 'GO'}</button>
+            </div>`;
     });
-    document.getElementById('score').innerText = totalScore;
+    document.getElementById('score').innerText = currentScore;
 }
 
-// --- 4. TASK INTERACTION ---
 function openTask(id) {
     currentTask = allTasks.find(t => t.id === id);
     if (completedTasks.includes(id)) return;
 
-    if (!firstOpenedAt[id]) {
-        firstOpenedAt[id] = Date.now();
-        localStorage.setItem('firstOpenedAt', JSON.stringify(firstOpenedAt));
-    }
-
     document.getElementById('modal-title').innerText = currentTask.title;
     document.getElementById('modal-clue').innerText = currentTask.clue;
-    document.getElementById('passcode-input').value = '';
-    document.getElementById('task-modal').style.display = 'block';
+    
+    const img = document.getElementById('modal-image');
+    if (currentTask.img) {
+        img.src = 'images/' + currentTask.img;
+        img.style.display = 'block';
+    } else {
+        img.style.display = 'none';
+    }
 
+    document.getElementById('task-modal').style.display = 'block';
+    document.getElementById('passcode-input').value = '';
     checkLockout();
-    checkHint();
+    checkHintDisplay();
 }
 
 function submitPasscode() {
-    const input = document.getElementById('passcode-input').value.trim().toUpperCase();
-    
-    if (input === currentTask.passcode.toUpperCase()) {
-        playSound('success');
-        triggerVibration('success');
+    const val = document.getElementById('passcode-input').value.trim().toUpperCase();
+    if (val === currentTask.code.toUpperCase()) {
+        sounds.success.play();
         completedTasks.push(currentTask.id);
         localStorage.setItem('completedTasks', JSON.stringify(completedTasks));
         closeModal();
         renderHub();
     } else {
         attempts[currentTask.id] = (attempts[currentTask.id] || 0) + 1;
-        localStorage.setItem('attempts', JSON.stringify(attempts));
-        
         if (attempts[currentTask.id] >= 3) {
-            playSound('lockout');
-            triggerVibration('lockout');
-            lockouts[currentTask.id] = Date.now() + 120000; // 2 Min Lock
+            sounds.lockout.play();
+            lockouts[currentTask.id] = Date.now() + 120000;
             localStorage.setItem('lockouts', JSON.stringify(lockouts));
-            attempts[currentTask.id] = 0; 
             checkLockout();
         } else {
-            playSound('error');
-            triggerVibration('error');
-            alert(`WRONG! ${3 - attempts[currentTask.id]} attempts remaining.`);
+            sounds.error.play();
+            alert("Wrong passcode!");
         }
     }
 }
 
-// --- 5. TIMERS & LOCKOUTS ---
-function checkLockout() {
-    const lockUntil = lockouts[currentTask.id];
-    if (lockUntil && Date.now() < lockUntil) {
-        document.getElementById('input-section').style.display = 'none';
-        document.getElementById('lockout-section').style.display = 'block';
-        clearInterval(lockoutTimerInterval);
-        lockoutTimerInterval = setInterval(() => {
-            const timeLeft = lockouts[currentTask.id] - Date.now();
-            if (timeLeft <= 0) { clearInterval(lockoutTimerInterval); checkLockout(); }
-            else {
-                const s = Math.floor(timeLeft / 1000);
-                document.getElementById('timer-display').innerText = `${Math.floor(s/60)}:${(s%60).toString().padStart(2,'0')}`;
-            }
-        }, 1000);
-    } else {
-        document.getElementById('input-section').style.display = 'block';
-        document.getElementById('lockout-section').style.display = 'none';
-    }
-}
-
-function checkHint() {
-    const btn = document.getElementById('hint-button');
-    const txt = document.getElementById('hint-text');
-    if (hintsUsed.includes(currentTask.id)) {
-        btn.style.display = 'none'; txt.style.display = 'block';
-        txt.innerText = "HINT: " + currentTask.hint;
-        return;
-    }
-    btn.style.display = 'none'; txt.style.display = 'none';
-    clearInterval(hintTimerInterval);
-    hintTimerInterval = setInterval(() => {
-        if (Date.now() - firstOpenedAt[currentTask.id] > 60000) {
-            btn.style.display = 'block'; clearInterval(hintTimerInterval);
-        }
-    }, 1000);
-}
-
-function revealHint() {
-    if (confirm("Unlock Hint for -25 Points?")) {
-        hintsUsed.push(currentTask.id);
-        localStorage.setItem('hintsUsed', JSON.stringify(hintsUsed));
-        checkHint(); renderHub();
-    }
-}
-
-function closeModal() {
-    document.getElementById('task-modal').style.display = 'none';
-    clearInterval(hintTimerInterval);
-    clearInterval(lockoutTimerInterval);
-}
-
-// --- 6. ADMIN & FEEDBACK ---
+// --- GOD MODE OVERRIDE ---
 function handleAdminTap() {
     adminTapCount++;
     clearTimeout(adminTapTimer);
-    if (adminTapCount >= 5) { adminTapCount = 0; adminSkipTask(); }
-    else { adminTapTimer = setTimeout(() => { adminTapCount = 0; }, 2000); }
-}
-
-function adminSkipTask() {
-    const code = prompt("Enter Game Master Override Code:");
-    if (code === "1337") {
-        completedTasks.push(currentTask.id);
-        localStorage.setItem('completedTasks', JSON.stringify(completedTasks));
-        delete lockouts[currentTask.id];
-        localStorage.setItem('lockouts', JSON.stringify(lockouts));
-        closeModal(); renderHub();
+    if (adminTapCount >= 5) {
+        adminTapCount = 0;
+        const masterCode = prompt("STATION MASTER OVERRIDE\nEnter code to bypass task (0 points awarded):");
+        if (masterCode === "1337") {
+            completedTasks.push(currentTask.id);
+            bypassedTasks.push(currentTask.id);
+            localStorage.setItem('completedTasks', JSON.stringify(completedTasks));
+            localStorage.setItem('bypassedTasks', JSON.stringify(bypassedTasks));
+            alert("Task Bypassed. No points awarded.");
+            closeModal();
+            renderHub();
+        }
+    } else {
+        adminTapTimer = setTimeout(() => { adminTapCount = 0; }, 2000);
     }
 }
 
-function playSound(t) { sounds[t].currentTime = 0; sounds[t].play().catch(() => {}); }
-
-function triggerVibration(type) {
-    if (!("vibrate" in navigator)) return;
-    if (type === 'error') navigator.vibrate([200, 100, 200]);
-    else if (type === 'success') navigator.vibrate(100);
-    else if (type === 'lockout') navigator.vibrate(500);
+function checkLockout() {
+    const lockTime = lockouts[currentTask.id];
+    const isLocked = lockTime && Date.now() < lockTime;
+    document.getElementById('input-section').style.display = isLocked ? 'none' : 'block';
+    document.getElementById('lockout-section').style.display = isLocked ? 'block' : 'none';
 }
 
-// --- 7. PIT STOP & RESULTS ---
+function checkHintDisplay() {
+    const btn = document.getElementById('hint-button');
+    const txt = document.getElementById('hint-text');
+    if (hintsUsed.includes(currentTask.id)) {
+        btn.style.display = 'none';
+        txt.innerText = "HINT: " + currentTask.hint;
+        txt.style.display = 'block';
+    } else {
+        btn.style.display = 'none';
+        txt.style.display = 'none';
+        setTimeout(() => { 
+            if (document.getElementById('task-modal').style.display === 'block') btn.style.display = 'block'; 
+        }, 60000);
+    }
+}
+
+function revealHint() {
+    if (confirm("Unlock hint for -25 points?")) {
+        hintsUsed.push(currentTask.id);
+        localStorage.setItem('hintsUsed', JSON.stringify(hintsUsed));
+        checkHintDisplay();
+        renderHub();
+    }
+}
+
+function closeModal() { document.getElementById('task-modal').style.display = 'none'; }
+
 function showPitStop() {
-    document.getElementById('pit-stop-screen').style.display = 'flex';
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById('pit-stop-screen').classList.add('active');
     document.getElementById('final-team-name').innerText = teamName;
-    const dur = Date.now() - startTime;
-    const s = Math.floor(dur / 1000);
-    document.getElementById('final-time-display').innerText = `Time: ${Math.floor(s/3600)}h ${Math.floor((s%3600)/60)}m ${s%60}s`;
+    const diff = Math.floor((Date.now() - startTime) / 1000);
+    document.getElementById('final-time-display').innerText = `Time: ${Math.floor(diff/60)}m ${diff%60}s`;
     
-    let totalScore = 0;
-    let body = "";
+    let finalScore = 0;
     allTasks.forEach(t => {
-        let p = t.points; if (hintsUsed.includes(t.id)) p -= 25;
-        totalScore += p; body += `<tr><td>${t.title}</td><td>${p}</td></tr>`;
+        if (!bypassedTasks.includes(t.id)) {
+            finalScore += (hintsUsed.includes(t.id) ? t.pts - 25 : t.pts);
+        }
     });
-    document.getElementById('summary-body').innerHTML = body;
-    document.getElementById('final-total-points').innerText = totalScore + " Pts";
+    document.getElementById('final-total-points').innerText = finalScore + " POINTS";
 }
 
 function downloadResults() {
-    let report = `TEAM: ${teamName}\nTIME: ${document.getElementById('final-time-display').innerText}\nSCORE: ${document.getElementById('final-total-points').innerText}\n`;
-    const blob = new Blob([report], { type: 'text/plain' });
+    const score = document.getElementById('final-total-points').innerText;
+    const time = document.getElementById('final-time-display').innerText;
+    const data = `TEAM: ${teamName}\n${time}\nSCORE: ${score}\nBYPASSED TASKS: ${bypassedTasks.length}`;
+    const blob = new Blob([data], {type: 'text/plain'});
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-    a.download = `Results_${teamName.replace(/\s+/g, '_')}.txt`; a.click();
+    a.download = `Results_${teamName}.txt`; a.click();
 }
 
-function resetGame() { if (confirm("Wipe all data and restart?")) { localStorage.clear(); location.reload(); } }
+function resetGame() { if (confirm("Wipe all progress?")) { localStorage.clear(); location.reload(); } }
+
+if (teamName) renderHub();
