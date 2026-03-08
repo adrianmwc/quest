@@ -82,6 +82,7 @@ function openTask(id) {
     if (currentTask.img) {
         img.src = 'images/' + currentTask.img;
         img.style.display = 'block';
+        img.onclick = zoomImage; // <-- Add this line to make it clickable
     } else {
         img.style.display = 'none';
     }
@@ -211,3 +212,4 @@ function zoomImage() {
 function closeZoom() {
     document.getElementById('image-overlay').style.display = 'none';
 }
+
