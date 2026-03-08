@@ -101,6 +101,13 @@ function renderHub() {
 }
 
 function openTask(id) {
+    // 1. Check if the task is already done
+    if (completedTasks.includes(id)) {
+        alert("🎖️ MISSION ACCOMPLISHED!\nYour team has already secured these points. Move on to the next station!");
+        return; 
+    }
+
+    // 2. Otherwise, continue with opening the task normally
     currentTask = allTasks.find(t => t.id === id);
     
     // Set Text Content
@@ -136,17 +143,45 @@ function previewPhoto(event) {
         img.onload = () => {
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
-            canvas.width = img.width; canvas.height = img.height;
+            canvas.width = img.width; 
+            canvas.height = img.height;
             ctx.drawImage(img, 0, 0);
+            
+            // 1. WATERMARK POSITIONING
             const fs = Math.floor(canvas.width / 20);
-            ctx.font = `bold ${fs}px sans-serif`; ctx.fillStyle = "yellow";
-            ctx.shadowColor = "black"; ctx.shadowBlur = 7;
-            ctx.fillText(`${teamName} | ${new Date().toLocaleTimeString()}`, fs, canvas.height - fs);
+            ctx.font = `bold ${fs}px sans-serif`; 
+            ctx.fillStyle = "yellow";
+            ctx.shadowColor = "black"; 
+            ctx.shadowBlur = 10;
+
+            // Shifted UP (fs * 1.5) and IN (fs) from the bottom-left corner
+            const xPos = fs;
+            const yPos = canvas.height - (fs * 1.5); 
+            
+            ctx.fillText(`${teamName} | ${new Date().toLocaleTimeString()}`, xPos, yPos);
+            
+            // 2. RENDER PREVIEW
             const data = canvas.toDataURL('image/jpeg', 0.7);
-            document.getElementById('task-photo-preview').src = data;
+            const previewImg = document.getElementById('task-photo-preview');
+            previewImg.src = data;
             document.getElementById('photo-preview-container').style.display = 'block';
+            
+            // Enable Submit Button
             document.querySelector('#input-section button').disabled = false;
-            db.transaction(["photos"],"readwrite").objectStore("photos").put({taskId:currentTask.id, data});
+            
+            // 3. THE MISSING SCROLL LOGIC
+            // Using a tiny timeout ensures the browser has rendered the image 
+            // before calculating the scroll position.
+            setTimeout(() => {
+                document.getElementById('input-section').scrollIntoView({ 
+                    behavior: 'smooth', 
+                    block: 'center' 
+                });
+            }, 150);
+
+            // 4. SAVE TO DATABASE
+            const tx = db.transaction(["photos"], "readwrite");
+            tx.objectStore("photos").put({taskId: currentTask.id, data: data});
         };
         img.src = e.target.result;
     };
@@ -198,43 +233,96 @@ function revealHint() {
     }
 }
 
-function showPitStop() {
-    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-    document.getElementById('pit-stop-screen').classList.add('active');
-    document.getElementById('final-team-name').innerText = teamName;
-    const diff = Math.floor((Date.now() - startTime) / 1000);
-    document.getElementById('final-time-display').innerText = `Total Time: ${Math.floor(diff/60)}m ${diff%60}s`;
+async function showPitStop() {
+    closeModal();
+    hideAllScreens();
+    document.getElementById('pit-stop-screen').style.display = 'block';
 
-    const body = document.getElementById('summary-table-body');
-    body.innerHTML = ""; let total = 0;
+    const logContainer = document.getElementById('station-breakdown');
+    logContainer.innerHTML = "<p style='text-align:center;'>Loading Mission Log...</p>";
+
+    // 1. Get Photos from Database
+    let photoData = {};
+    try {
+        const tx = db.transaction(["photos"], "readonly");
+        const store = tx.objectStore("photos");
+        const allPhotos = await new Promise((resolve) => {
+            const req = store.getAll();
+            req.onsuccess = () => resolve(req.result);
+        });
+        allPhotos.forEach(p => photoData[p.taskId] = p.data);
+    } catch (e) { console.warn("Photo fetch failed", e); }
+
+    // 2. Build the Integrated Cards
+    let totalScore = 0;
+    let htmlBuilder = "";
+
     allTasks.forEach(t => {
-        let h = hintsUsed.includes(t.id)?25:0;
-        let e = (attempts[t.id]||0)*10;
-        let skip = bypassedTasks.includes(t.id);
-        let f = skip ? 0 : Math.max(0, t.pts - h - e);
-        if(completedTasks.includes(t.id)) total += f;
-        body.innerHTML += `<tr><td>${t.title}</td><td>${t.pts}</td><td>-${h}</td><td>-${e}</td><td>${f}</td></tr>`;
-    });
-    document.getElementById('final-total-points').innerText = total + " POINTS";
+        const isDone = completedTasks.includes(t.id);
+        const h = hintsUsed.includes(t.id) ? 25 : 0;
+        const e = (attempts[t.id] || 0) * 10;
+        const final = isDone ? Math.max(0, t.pts - h - e) : 0;
+        if(isDone) totalScore += final;
 
-    const gal = document.getElementById('photo-gallery');
-    gal.innerHTML = "";
-    db.transaction(["photos"]).objectStore("photos").openCursor().onsuccess = e => {
-        const c = e.target.result;
-        if(c) { gal.innerHTML += `<div class="gallery-item"><img src="${c.value.data}"></div>`; c.continue(); }
-    };
+        const imgHtml = photoData[t.id] ? 
+            `<img src="${photoData[t.id]}" class="log-card-img" onclick="openZoom('${photoData[t.id]}')">` : 
+            `<div style="color:#444; font-size:0.7rem; padding:10px;">(No photo captured)</div>`;
+
+        htmlBuilder += `
+            <div class="log-card">
+                <div class="log-header">${t.title}</div>
+                ${imgHtml}
+                <div class="log-row"><span>Base Points:</span> <span>${t.pts}</span></div>
+                <div class="log-row"><span>Hint Penalty:</span> <span style="color:${h > 0 ? '#ff4444' : '#666'}">-${h}</span></div>
+                <div class="log-row"><span>Error Penalties:</span> <span style="color:${e > 0 ? '#ff4444' : '#666'}">-${e}</span></div>
+                <div class="log-row" style="margin-top:8px; border-top:1px dashed #444; padding-top:8px; font-weight:bold;">
+                    <span>Earned:</span> <span style="color:#4CAF50;">${final} PTS</span>
+                </div>
+            </div>`;
+    });
+
+    logContainer.innerHTML = htmlBuilder;
+
+    // 3. Update Text Fields
+    document.getElementById('final-team-name').innerText = teamName;
+    document.getElementById('final-total-points').innerText = totalScore;
+    const timerText = document.getElementById('timer') ? document.getElementById('timer').innerText : "Completed";
+    document.getElementById('final-time-display').innerText = `Total Time: ${timerText}`;
 }
 
 function downloadResults() {
-    let report = `TEAM: ${teamName}\nSCORE: ${document.getElementById('final-total-points').innerText}\n\nSTATION BREAKDOWN:\n`;
+    let report = `--- OFFICIAL RACE RESULTS: ${teamName} ---\n`;
+    report += `TOTAL SCORE: ${document.getElementById('final-total-points').innerText}\n`;
+    report += `${document.getElementById('final-time-display').innerText}\n`;
+    report += `------------------------------------------\n\n`;
+    report += `STATION BREAKDOWN:\n\n`;
+
     allTasks.forEach(t => {
-        report += `${t.title}: ${completedTasks.includes(t.id)?'DONE':'FAIL'} | Hints: ${hintsUsed.includes(t.id)?'YES':'NO'} | Errs: ${attempts[t.id]||0}\n`;
+        const isDone = completedTasks.includes(t.id);
+        const hintPenalty = hintsUsed.includes(t.id) ? 25 : 0;
+        const errorCount = (attempts[t.id] || 0);
+        const errorPenalty = errorCount * 10;
+        const finalTaskScore = isDone ? Math.max(0, t.pts - hintPenalty - errorPenalty) : 0;
+
+        report += `[${t.title}]\n`;
+        report += ` - Status: ${isDone ? "COMPLETED" : "INCOMPLETE"}\n`;
+        report += ` - Base Points: ${t.pts}\n`;
+        report += ` - Hint Used: ${hintPenalty > 0 ? "-25" : "No"}\n`;
+        report += ` - Wrong Tries: ${errorCount} (-${errorPenalty})\n`;
+        report += ` - Points Earned: ${finalTaskScore}\n`;
+        report += `--------------------------\n`;
     });
+
+    report += `\nGenerated on: ${new Date().toLocaleString()}\n`;
+
+    // Create the file blob and trigger download
     const blob = new Blob([report], { type: 'text/plain' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `Results_${teamName.replace(/\s/g,'_')}.txt`;
+    a.download = `Results_${teamName.replace(/\s+/g, '_')}.txt`;
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
 }
 
 function handleAdminTap() {
@@ -303,6 +391,94 @@ function adminResetTrigger() {
     } else if (adminCode !== null) {
         alert("Access Denied: Incorrect Admin Passcode.");
     }
+}
+
+function hideAllScreens() {
+    const screens = document.querySelectorAll('.screen');
+    screens.forEach(s => {
+        s.style.display = 'none';
+        s.classList.remove('active');
+    });
+}
+
+async function downloadPDF() {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    let y = 20; // Vertical position tracker
+
+    // 1. Header
+    doc.setFontSize(22);
+    doc.setTextColor(184, 134, 11); // Gold color
+    doc.text("AMAZING RACE OFFICIAL RESULTS", 20, y);
+    
+    y += 15;
+    doc.setFontSize(16);
+    doc.setTextColor(0, 0, 0);
+    doc.text(`Team: ${teamName}`, 20, y);
+    
+    y += 10;
+    const finalScore = document.getElementById('final-total-points').innerText;
+    const finalTime = document.getElementById('final-time-display').innerText;
+    doc.text(`Total Score: ${finalScore} PTS`, 20, y);
+    doc.text(finalTime, 120, y);
+
+    y += 15;
+    doc.setLineWidth(0.5);
+    doc.line(20, y, 190, y);
+    y += 10;
+
+    // 2. Fetch Photos from DB
+    let photoData = {};
+    try {
+        const tx = db.transaction(["photos"], "readonly");
+        const photos = await new Promise(resolve => {
+            const req = tx.objectStore("photos").getAll();
+            req.onsuccess = () => resolve(req.result);
+        });
+        photos.forEach(p => photoData[p.taskId] = p.data);
+    } catch (e) { console.error(e); }
+
+    // 3. Loop through tasks
+    doc.setFontSize(12);
+    allTasks.forEach((t, index) => {
+        const isDone = completedTasks.includes(t.id);
+        const h = hintsUsed.includes(t.id) ? 25 : 0;
+        const e = (attempts[t.id] || 0) * 10;
+        const final = isDone ? Math.max(0, t.pts - h - e) : 0;
+
+        // Check if we need a new page
+        if (y > 240) {
+            doc.addPage();
+            y = 20;
+        }
+
+        doc.setFont(undefined, 'bold');
+        doc.text(`${index + 1}. ${t.title}`, 20, y);
+        doc.setFont(undefined, 'normal');
+        y += 7;
+        doc.text(`Score: ${final} pts (Base: ${t.pts}, Hint: -${h}, Errors: -${e})`, 20, y);
+        y += 10;
+
+        // Add Photo if it exists
+        if (photoData[t.id]) {
+            try {
+                // PDF images need to be squeezed to fit
+                doc.addImage(photoData[t.id], 'JPEG', 20, y, 60, 45);
+                y += 55;
+            } catch (err) {
+                doc.text("[Image Error]", 20, y);
+                y += 10;
+            }
+        } else {
+            doc.setTextColor(150, 150, 150);
+            doc.text("No photo captured.", 25, y);
+            doc.setTextColor(0, 0, 0);
+            y += 10;
+        }
+    });
+
+    // 4. Save the file
+    doc.save(`Race_Results_${teamName.replace(/\s+/g, '_')}.pdf`);
 }
 
 // Call this immediately at the bottom of script.js to be safe
