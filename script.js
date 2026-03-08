@@ -196,4 +196,18 @@ function downloadResults() {
 
 function resetGame() { if (confirm("Wipe all progress?")) { localStorage.clear(); location.reload(); } }
 
+
 if (teamName) renderHub();
+
+function zoomImage() {
+    const src = document.getElementById('modal-image').src;
+    const overlay = document.getElementById('image-overlay');
+    const overlayImg = document.getElementById('overlay-img');
+    
+    overlayImg.src = src;
+    overlay.style.display = 'flex';
+}
+
+function closeZoom() {
+    document.getElementById('image-overlay').style.display = 'none';
+}
