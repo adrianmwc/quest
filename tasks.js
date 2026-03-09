@@ -26,5 +26,4 @@ const allTasks = [
         img: "library.jpg",
         hint: "It's an even number between 10 and 15."
     }
-
 ];

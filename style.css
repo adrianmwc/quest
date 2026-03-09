@@ -1,7 +1,7 @@
 :root { --gold: #ffde00; --dark: #121212; --card: #1e1e1e; }
 body { margin: 0; background: var(--dark); color: white; font-family: sans-serif; -webkit-user-select: none; }
 
-.screen { display: none; padding: 20px; flex-direction: column; align-items: center; min-height: 100vh; }
+.screen { display: none; padding: 60px; flex-direction: column; align-items: center; min-height: 100vh; }
 .screen.active { display: flex !important; }
 
 /* Ensure the Pit Stop is visible when active */

@@ -10,6 +10,8 @@ let lockoutCounts = JSON.parse(localStorage.getItem('lockoutCounts')) || {};
 let currentTask = null;
 let lockoutTimerInterval;
 let adminTapCount = 0;
+var timerInterval = null; // Use 'var' to ensure it's globally attached to the window
+let taskCompletionTimes = JSON.parse(localStorage.getItem('taskCompletionTimes')) || {};
 
 // Initialize IndexedDB for Photos
 const req = indexedDB.open("RacePhotoLog", 1);
@@ -101,6 +103,16 @@ function renderHub() {
 }
 
 function openTask(id) {
+    // 0. START TIMER ON FIRST INTERACTION
+    // We check if startTime is "null", undefined, or 0
+    if (!startTime || startTime === "null" || startTime === 0) {
+        startTime = Date.now().toString(); // Store as string for localStorage
+        localStorage.setItem('startTime', startTime);
+        console.log("Race Clock Started!"); 
+    }
+
+    startLiveTimer();
+
     // 1. Check if the task is already done
     if (completedTasks.includes(id)) {
         alert("🎖️ MISSION ACCOMPLISHED!\nYour team has already secured these points. Move on to the next station!");
@@ -191,6 +203,13 @@ function previewPhoto(event) {
 function submitPasscode() {
     const val = document.getElementById('passcode-input').value.trim().toUpperCase();
     if(val === currentTask.code.toUpperCase()) {
+
+        // --- NEW LOGIC: Record completion time ---
+        if (!taskCompletionTimes[currentTask.id]) {
+            taskCompletionTimes[currentTask.id] = Date.now();
+            localStorage.setItem('taskCompletionTimes', JSON.stringify(taskCompletionTimes));
+        }
+        
         completedTasks.push(currentTask.id);
         localStorage.setItem('completedTasks', JSON.stringify(completedTasks));
         closeModal(); renderHub();
@@ -234,9 +253,26 @@ function revealHint() {
 }
 
 async function showPitStop() {
+    // 1. Stop the ticking
+    clearInterval(timerInterval); // STOP THE CLOCK
+
+    // 2. Hide the moving global timer bar
+    const globalTimer = document.getElementById('global-timer-bar');
+    if (globalTimer) globalTimer.style.display = 'none';
+
     closeModal();
     hideAllScreens();
     document.getElementById('pit-stop-screen').style.display = 'block';
+
+    // Calculate final time string
+    const totalSeconds = Math.floor((Date.now() - startTime) / 1000);
+    const m = Math.floor(totalSeconds / 60);
+    const s = totalSeconds % 60;
+    const finalTimeStr = `${m}:${s.toString().padStart(2, '0')}`;
+
+    // Update the UI
+    document.getElementById('pit-stop-screen').style.display = 'block';
+    document.getElementById('final-time-display').innerText = `Total Race Time: ${finalTimeStr}`;
 
     const logContainer = document.getElementById('station-breakdown');
     logContainer.innerHTML = "<p style='text-align:center;'>Loading Mission Log...</p>";
@@ -264,6 +300,17 @@ async function showPitStop() {
         const final = isDone ? Math.max(0, t.pts - h - e) : 0;
         if(isDone) totalScore += final;
 
+        // --- NEW LOGIC: Calculate duration for this task ---
+        let timeTakenText = "Incomplete";
+        if (isDone && taskCompletionTimes[t.id]) {
+            const durationMs = taskCompletionTimes[t.id] - startTime;
+            const totalSecs = Math.floor(durationMs / 1000);
+            const m = Math.floor(totalSecs / 60);
+            const s = totalSecs % 60;
+            timeTakenText = `${m}m ${s}s since start`;
+        }
+        // ---------------------------------------------------
+        
         const imgHtml = photoData[t.id] ? 
             `<img src="${photoData[t.id]}" class="log-card-img" onclick="openZoom('${photoData[t.id]}')">` : 
             `<div style="color:#444; font-size:0.7rem; padding:10px;">(No photo captured)</div>`;
@@ -272,6 +319,9 @@ async function showPitStop() {
             <div class="log-card">
                 <div class="log-header">${t.title}</div>
                 ${imgHtml}
+                <div class="log-row" style="color: #888; font-style: italic;">
+                    <span>Completed at:</span> <span>${timeTakenText}</span>
+                </div>
                 <div class="log-row"><span>Base Points:</span> <span>${t.pts}</span></div>
                 <div class="log-row"><span>Hint Penalty:</span> <span style="color:${h > 0 ? '#ff4444' : '#666'}">-${h}</span></div>
                 <div class="log-row"><span>Error Penalties:</span> <span style="color:${e > 0 ? '#ff4444' : '#666'}">-${e}</span></div>
@@ -287,42 +337,60 @@ async function showPitStop() {
     document.getElementById('final-team-name').innerText = teamName;
     document.getElementById('final-total-points').innerText = totalScore;
     const timerText = document.getElementById('timer') ? document.getElementById('timer').innerText : "Completed";
-    document.getElementById('final-time-display').innerText = `Total Time: ${timerText}`;
+    document.getElementById('final-time-display').innerText = `${timerText}`;
 }
 
 function downloadResults() {
-    let report = `--- OFFICIAL RACE RESULTS: ${teamName} ---\n`;
-    report += `TOTAL SCORE: ${document.getElementById('final-total-points').innerText}\n`;
-    report += `${document.getElementById('final-time-display').innerText}\n`;
+    // 1. Calculate Start and End Strings
+    const startStr = new Date(parseInt(startTime)).toLocaleTimeString();
+    const endStr = new Date().toLocaleTimeString();
+    const totalScore = document.getElementById('final-total-points').innerText;
+    const finalTime = document.getElementById('final-time-display').innerText;
+
+    let report = `==========================================\n`;
+    report += `       AMAZING RACE OFFICIAL LOG\n`;
+    report += `==========================================\n\n`;
+    report += `TEAM NAME   : ${teamName}\n`;
+    report += `TOTAL SCORE : ${totalScore} PTS\n`;
+    report += `DURATION    : ${finalTime}\n\n`;
+    report += `START TIME : ${startStr}\n`;
+    report += `FINISH TIME: ${endStr}\n`;
+    report += `\n------------------------------------------\n`;
+    report += `             STATION BREAKDOWN\n`;
     report += `------------------------------------------\n\n`;
-    report += `STATION BREAKDOWN:\n\n`;
 
-    allTasks.forEach(t => {
+    allTasks.forEach((t, index) => {
         const isDone = completedTasks.includes(t.id);
-        const hintPenalty = hintsUsed.includes(t.id) ? 25 : 0;
-        const errorCount = (attempts[t.id] || 0);
-        const errorPenalty = errorCount * 10;
-        const finalTaskScore = isDone ? Math.max(0, t.pts - hintPenalty - errorPenalty) : 0;
+        const h = hintsUsed.includes(t.id) ? 25 : 0;
+        const e = (attempts[t.id] || 0) * 10;
+        const final = isDone ? Math.max(0, t.pts - h - e) : 0;
 
-        report += `[${t.title}]\n`;
-        report += ` - Status: ${isDone ? "COMPLETED" : "INCOMPLETE"}\n`;
-        report += ` - Base Points: ${t.pts}\n`;
-        report += ` - Hint Used: ${hintPenalty > 0 ? "-25" : "No"}\n`;
-        report += ` - Wrong Tries: ${errorCount} (-${errorPenalty})\n`;
-        report += ` - Points Earned: ${finalTaskScore}\n`;
-        report += `--------------------------\n`;
+        // Calculate split time for this task
+        let splitTime = "N/A";
+        if (isDone && taskCompletionTimes[t.id]) {
+            const diff = Math.floor((taskCompletionTimes[t.id] - startTime) / 1000);
+            const m = Math.floor(diff / 60);
+            const s = diff % 60;
+            splitTime = `${m}m ${s}s since start`;
+        }
+
+        report += `${index + 1}. ${t.title.toUpperCase()}\n`;
+        report += `   Status    : ${isDone ? 'COMPLETED' : 'MISSING'}\n`;
+        report += `   Timestamp : ${splitTime}\n`;
+        report += `   Base Pts  : ${t.pts}\n`;
+        report += `   Penalties : -${h} (Hint), -${e} (Errors)\n`;
+        report += `   EARNED    : ${final} PTS\n`;
+        report += `------------------------------------------\n`;
     });
 
     report += `\nGenerated on: ${new Date().toLocaleString()}\n`;
 
-    // Create the file blob and trigger download
+    // Create and trigger download
     const blob = new Blob([report], { type: 'text/plain' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `Results_${teamName.replace(/\s+/g, '_')}.txt`;
-    document.body.appendChild(a);
+    a.download = `Race_Log_${teamName.replace(/\s+/g, '_')}.txt`;
     a.click();
-    document.body.removeChild(a);
 }
 
 function handleAdminTap() {
@@ -406,7 +474,12 @@ async function downloadPDF() {
     const doc = new jsPDF();
     let y = 20; // Vertical position tracker
 
-    // 1. Header
+    // 1. Header & Official Times
+    const startStr = new Date(parseInt(startTime)).toLocaleTimeString();
+    const endStr = new Date().toLocaleTimeString();
+    const finalScore = document.getElementById('final-total-points').innerText;
+    const finalTime = document.getElementById('final-time-display').innerText;
+
     doc.setFontSize(22);
     doc.setTextColor(184, 134, 11); // Gold color
     doc.text("AMAZING RACE OFFICIAL RESULTS", 20, y);
@@ -414,18 +487,24 @@ async function downloadPDF() {
     y += 15;
     doc.setFontSize(16);
     doc.setTextColor(0, 0, 0);
-    doc.text(`Team: ${teamName}`, 20, y);
+    doc.text(`Team name   : ${teamName}`, 20, y);
     
+    doc.text(`Total Score : ${finalScore} points`, 120, y);
     y += 10;
-    const finalScore = document.getElementById('final-total-points').innerText;
-    const finalTime = document.getElementById('final-time-display').innerText;
-    doc.text(`Total Score: ${finalScore} PTS`, 20, y);
-    doc.text(finalTime, 120, y);
+    doc.text(`Duration     : ${finalTime} seconds`, 120, y);
 
-    y += 15;
+    y += 5;
+    doc.setFontSize(11);
+    doc.setTextColor(80, 80, 80);
+    doc.text(`Start: ${startStr}`, 120, y);
+    y += 5;
+    doc.text(`Finish: ${endStr}`, 120, y);
+
+    y += 5;
     doc.setLineWidth(0.5);
+    doc.setDrawColor(184, 134, 11);
     doc.line(20, y, 190, y);
-    y += 10;
+    y += 5;
 
     // 2. Fetch Photos from DB
     let photoData = {};
@@ -452,12 +531,27 @@ async function downloadPDF() {
             y = 20;
         }
 
+        //Task header
         doc.setFont(undefined, 'bold');
         doc.text(`${index + 1}. ${t.title}`, 20, y);
-        doc.setFont(undefined, 'normal');
         y += 7;
+
+        //timer report start Inside allTasks.forEach in downloadPDF():
+        const timeTaken = taskCompletionTimes[t.id] ? 
+            Math.floor((taskCompletionTimes[t.id] - startTime) / 1000) : 0;
+        const m = Math.floor(timeTaken / 60);
+        const s = timeTaken % 60;
+
+        doc.setFont(undefined, 'italic');
+        doc.text(`Time taken: ${m}m ${s}s from start`, 20, y);
+        doc.setFont(undefined, 'normal');
+        y += 5;
+        //timer report end
+
+        //points report
+        doc.setFont(undefined, 'normal');
         doc.text(`Score: ${final} pts (Base: ${t.pts}, Hint: -${h}, Errors: -${e})`, 20, y);
-        y += 10;
+        y += 5;
 
         // Add Photo if it exists
         if (photoData[t.id]) {
@@ -467,19 +561,71 @@ async function downloadPDF() {
                 y += 55;
             } catch (err) {
                 doc.text("[Image Error]", 20, y);
-                y += 10;
+                y += 5;
             }
         } else {
             doc.setTextColor(150, 150, 150);
             doc.text("No photo captured.", 25, y);
             doc.setTextColor(0, 0, 0);
-            y += 10;
+            y += 5;
         }
+
+        doc.setLineWidth(0.5);
+        doc.setDrawColor(184, 134, 11);
+        doc.line(20, y, 190, y);
+        y += 5;
     });
 
     // 4. Save the file
     doc.save(`Race_Results_${teamName.replace(/\s+/g, '_')}.pdf`);
 }
+
+function startLiveTimer() {
+    // Clear any existing interval first
+    // 1. Clear any existing timer to prevent double-speed ticking
+    if (window.timerInterval) clearInterval(window.timerInterval);
+
+    console.log("Timer Tick Started...");
+
+    // 2. Set the interval
+    window.timerInterval = setInterval(() => {
+        const timerDisplay = document.getElementById('timer');
+
+        // If the element doesn't exist, we can't update it (safety check)
+        if (!timerDisplay) return;
+
+        // Force the startTime to be a number
+        const start = parseInt(startTime);
+        if (isNaN(start)) return;
+
+        const now = Date.now();
+        const diff = Math.floor((now - start) / 1000);
+        
+        if (diff < 0) return; // Prevent negative time
+
+        const m = Math.floor(diff / 60);
+        const s = diff % 60;
+        
+        // Update the text, This line actually updates the screen every 1 second
+        timerDisplay.innerText = `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    }, 1000);
+}
+
+// Add this to the very bottom of script.js
+window.onload = function() {
+    // If a race was already started, resume the timer
+    if (startTime && startTime !== "null") {
+        startLiveTimer();
+    }
+};
+
+// This runs automatically whenever the page loads
+window.addEventListener('load', () => {
+    // Check if a race is already underway
+    if (startTime && startTime !== "null" && !completedTasks.includes('finished')) {
+        startLiveTimer();
+    }
+});
 
 // Call this immediately at the bottom of script.js to be safe
 showWelcomeScreen();
