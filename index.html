@@ -109,6 +109,12 @@
         <p class="overlay-close-hint">Tap anywhere to close</p>
     </div>
 
+    <div id="debug-status-bar" style="position: fixed; bottom: 0; left: 0; width: 100%; height: 25px; display: flex; z-index: 10001; font-family: sans-serif; font-size: 10px; font-weight: bold; text-transform: uppercase; color: white; pointer-events: none; opacity: 0.8;">
+        <div id="db-indicator" style="flex: 1; display: flex; align-items: center; justify-content: center; background: #444;">PHOTOS</div>
+        <div id="storage-indicator" style="flex: 1; display: flex; align-items: center; justify-content: center; background: #444; border-left: 1px solid rgba(255,255,255,0.1); border-right: 1px solid rgba(255,255,255,0.1);">DATA</div>
+        <div id="offline-indicator" style="flex: 1; display: flex; align-items: center; justify-content: center; background: #444;">WIFI</div>
+    </div>
+
     <script src="tasks.js"></script>
     <script src="script.js"></script>
     <script>

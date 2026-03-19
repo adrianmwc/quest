@@ -627,5 +627,98 @@ window.addEventListener('load', () => {
     }
 });
 
+function adminBypass() {
+    const code = prompt("ENTER ADMIN KEY TO BYPASS RACE:");
+    
+    if (code === "1337") {
+        console.log("Admin Bypass Triggered. Finalizing results...");
+        
+        // 1. Stop the clock if it's running
+        if (window.timerInterval) clearInterval(window.timerInterval);
+        
+        // 2. Ensure startTime exists (if they haven't even started)
+        if (!startTime || startTime === "null") {
+            startTime = Date.now().toString();
+            localStorage.setItem('startTime', startTime);
+        }
+
+        // 3. Trigger the Pit Stop screen
+        showPitStop();
+        
+        alert("Bypass Successful. Reviewing current progress.");
+    } else if (code !== null) {
+        alert("ACCESS DENIED");
+    }
+}
+
+function checkBattery(battery) {
+    const statusContent = document.getElementById('debug-status-bar');
+    if (!statusContent) return;
+
+    // If battery is 20% or lower and NOT charging
+    if (battery.level <= 0.20 && !battery.charging) {
+        statusContent.style.background = "rgba(255, 0, 0, 0.9)"; // Turn bar deep red
+        console.warn("CRITICAL: Battery Low - Race Timer Throttling Possible");
+    } else {
+        statusContent.style.background = "rgba(0, 0, 0, 0.8)"; // Return to normal semi-transparent black
+    }
+}
+
+function runSystemCheck() {
+    const dbInd = document.getElementById('db-indicator');
+    const storInd = document.getElementById('storage-indicator');
+    const offInd = document.getElementById('offline-indicator');
+
+    // 1. Check Photo Database
+    if (db) {
+        dbInd.style.background = "var(--success-green)";
+        dbInd.innerText = "PHOTOS: READY";
+    } else {
+        dbInd.style.background = "var(--error-red)";
+        dbInd.innerText = "PHOTOS: ERROR";
+    }
+
+    // 2. Check Local Storage (Scores)
+    try {
+        localStorage.setItem('health_check', 'ok');
+        localStorage.removeItem('health_check');
+        storInd.style.background = "var(--success-green)";
+        storInd.innerText = "LOGS: ACTIVE";
+    } catch(e) {
+        storInd.style.background = "var(--error-red)";
+        storInd.innerText = "LOGS: BLOCKED";
+    }
+
+    // 3. Check Wifi/Offline Status
+    const updateOnlineStatus = () => {
+        if (navigator.onLine) {
+            offInd.style.background = "#3498db"; // Blue
+            offInd.innerText = "LINK: ONLINE";
+        } else {
+            offInd.style.background = "#f39c12"; // Orange
+            offInd.innerText = "LINK: OFFLINE";
+        }
+    };
+    
+    window.addEventListener('online', updateOnlineStatus);
+    window.addEventListener('offline', updateOnlineStatus);
+    updateOnlineStatus();
+
+    // 4. Battery Check (Bonus)
+    if (navigator.getBattery) {
+        navigator.getBattery().then(battery => {
+            // Run once on load
+            checkBattery(battery);
+
+            // Listen for changes (unplugging or dropping levels)
+            battery.addEventListener('levelchange', () => checkBattery(battery));
+            battery.addEventListener('chargingchange', () => checkBattery(battery));
+        });
+    }
+}
+
+// Call it to start the monitoring
+runSystemCheck();
+
 // Call this immediately at the bottom of script.js to be safe
 showWelcomeScreen();
