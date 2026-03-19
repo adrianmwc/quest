@@ -13,6 +13,8 @@ let adminTapCount = 0;
 var timerInterval = null; // Use 'var' to ensure it's globally attached to the window
 let taskCompletionTimes = JSON.parse(localStorage.getItem('taskCompletionTimes')) || {};
 
+
+// --- 1. DATABASE & INITIALIZATION ---
 // Initialize IndexedDB for Photos
 const req = indexedDB.open("RacePhotoLog", 1);
 
@@ -50,6 +52,80 @@ function showWelcomeScreen() {
     document.getElementById('welcome-screen').classList.add('active');
 }
 
+// --- 2. ASSET PRELOADING & AUDIT GRID ---
+function preloadAssets() {
+    const preloader = document.getElementById('preloader');
+    const auditGrid = document.getElementById('visual-audit-grid');
+    
+    if (!preloader || !auditGrid) return;
+    
+    preloader.innerHTML = ''; 
+    auditGrid.innerHTML = ''; 
+    
+    // Uses 'allTasks' from tasks.js
+    allTasks.forEach((task, index) => {
+        if (task.img) {
+            const img = new Image();
+            const path = "images/" + task.img;
+            img.src = path;
+
+            // 1. Add to hidden preloader for caching
+            preloader.appendChild(img); 
+
+            // 2. Add to the visible troubleshooting grid
+            const thumb = document.createElement('img');
+            thumb.src = path;
+            thumb.style.cssText = "width:100%; height:40px; object-fit:cover; border-radius:4px; border:1px solid #444;";
+            thumb.title = `Task ${index + 1}`;
+            
+            thumb.onerror = () => { 
+                thumb.style.border = "2px solid #ff4444"; 
+                console.error("Failed to load: " + path);
+            };
+            
+            auditGrid.appendChild(thumb);
+        }
+    });
+}
+
+function checkOfflineReady() {
+    const assetBar = document.getElementById('asset-status-bar');
+    const images = document.querySelectorAll('#preloader img');
+    
+    const totalCount = allTasks.filter(t => t.img).length;
+    const loadedCount = Array.from(images).filter(img => img.complete).length;
+
+    // Update numbers in the UI checklist
+    if(document.getElementById('asset-count')) {
+        document.getElementById('asset-count').innerText = loadedCount;
+        document.getElementById('asset-total').innerText = totalCount;
+    }
+
+    if (totalCount > 0 && loadedCount >= totalCount) {
+        if (assetBar) {
+            assetBar.style.background = "#27ae60"; // Green
+            assetBar.innerText = `READY: ${loadedCount}/${totalCount}`;
+        }
+        const msg = document.getElementById('check-msg');
+        if (msg) {
+            msg.innerText = "ALL SYSTEMS GO!";
+            msg.style.color = "#27ae60";
+        }
+    } else {
+        if (assetBar) {
+            assetBar.style.background = "#f39c12"; // Orange
+            assetBar.innerText = `CACHING: ${loadedCount}/${totalCount}`;
+        }
+        setTimeout(checkOfflineReady, 1000);
+    }
+}
+
+function retryPreload() {
+    preloadAssets();
+    checkOfflineReady();
+}
+
+// --- 3. RACE LOGIC ---
 function startRace() {
     try {
         const nameInput = document.getElementById('team-name-input');
@@ -65,6 +141,10 @@ function startRace() {
         localStorage.setItem('teamName', teamName);
         localStorage.setItem('startTime', startTime);
         
+        // Hide the troubleshooting grid now that race has started
+        const checklist = document.getElementById('pre-race-checklist');
+        if (checklist) checklist.style.display = 'none';
+
         renderHub();
     } catch (err) {
         // This will tell you EXACTLY why the button isn't working
@@ -161,6 +241,81 @@ function openTask(id) {
     document.querySelector('#input-section button').disabled = true;
     
     checkLockout();
+}
+
+// --- 4. UTILITIES & SYSTEM CHECK ---
+function runSystemCheck() {
+    const dbInd = document.getElementById('db-indicator');
+    const storInd = document.getElementById('storage-indicator');
+    const offInd = document.getElementById('offline-indicator');
+
+    if (db) {
+        dbInd.style.background = "#27ae60";
+        dbInd.innerText = "PHOTOS: READY";
+    }
+
+    try {
+        localStorage.setItem('health_check', 'ok');
+        localStorage.removeItem('health_check');
+        storInd.style.background = "#27ae60";
+        storInd.innerText = "LOGS: ACTIVE";
+    } catch(e) {
+        storInd.style.background = "#e74c3c";
+    }
+
+    const updateOnlineStatus = () => {
+        offInd.style.background = navigator.onLine ? "#3498db" : "#f39c12";
+        offInd.innerText = navigator.onLine ? "LINK: ONLINE" : "LINK: OFFLINE";
+    };
+    window.addEventListener('online', updateOnlineStatus);
+    window.addEventListener('offline', updateOnlineStatus);
+    updateOnlineStatus();
+
+    checkOfflineReady();
+}
+
+function startLiveTimer() {
+    // Clear any existing interval first
+    // 1. Clear any existing timer to prevent double-speed ticking
+    if (window.timerInterval) clearInterval(window.timerInterval);
+
+    console.log("Timer Tick Started...");
+
+    // 2. Set the interval
+    window.timerInterval = setInterval(() => {
+        const timerDisplay = document.getElementById('timer');
+
+        // If the element doesn't exist, we can't update it (safety check)
+        if (!timerDisplay) return;
+
+        // Force the startTime to be a number
+        const start = parseInt(startTime);
+        if (isNaN(start)) return;
+
+        const now = Date.now();
+        const diff = Math.floor((now - start) / 1000);
+        
+        if (diff < 0) return; // Prevent negative time
+
+        const m = Math.floor(diff / 60);
+        const s = diff % 60;
+        
+        // Update the text, This line actually updates the screen every 1 second
+        timerDisplay.innerText = `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    }, 1000);
+}
+
+// Helper to close modals
+function closeModal() { 
+    document.getElementById('task-modal').style.display='none'; 
+    clearInterval(lockoutTimerInterval); 
+}
+
+function resetGame() {
+    if(confirm("Wipe everything?") && prompt("Master Code") === "1337") {
+        localStorage.clear();
+        db.transaction(["photos"],"readwrite").objectStore("photos").clear().onsuccess = () => location.reload();
+    }
 }
 
 function previewPhoto(event) {
@@ -427,14 +582,6 @@ function handleAdminTap() {
     }
 }
 
-function resetGame() {
-    if(confirm("Wipe everything?") && prompt("Master Code") === "1337") {
-        localStorage.clear();
-        db.transaction(["photos"],"readwrite").objectStore("photos").clear().onsuccess = () => location.reload();
-    }
-}
-
-function closeModal() { document.getElementById('task-modal').style.display='none'; clearInterval(lockoutTimerInterval); }
 // Function to enlarge the image
 function zoomImage() {
     const smallImg = document.getElementById('modal-image');
@@ -597,37 +744,6 @@ async function downloadPDF() {
     doc.save(`Race_Results_${teamName.replace(/\s+/g, '_')}.pdf`);
 }
 
-function startLiveTimer() {
-    // Clear any existing interval first
-    // 1. Clear any existing timer to prevent double-speed ticking
-    if (window.timerInterval) clearInterval(window.timerInterval);
-
-    console.log("Timer Tick Started...");
-
-    // 2. Set the interval
-    window.timerInterval = setInterval(() => {
-        const timerDisplay = document.getElementById('timer');
-
-        // If the element doesn't exist, we can't update it (safety check)
-        if (!timerDisplay) return;
-
-        // Force the startTime to be a number
-        const start = parseInt(startTime);
-        if (isNaN(start)) return;
-
-        const now = Date.now();
-        const diff = Math.floor((now - start) / 1000);
-        
-        if (diff < 0) return; // Prevent negative time
-
-        const m = Math.floor(diff / 60);
-        const s = diff % 60;
-        
-        // Update the text, This line actually updates the screen every 1 second
-        timerDisplay.innerText = `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-    }, 1000);
-}
-
 function adminBypass() {
     const code = prompt("ENTER ADMIN KEY TO BYPASS RACE:");
     
@@ -652,6 +768,7 @@ function adminBypass() {
     }
 }
 
+/*
 function checkBattery(battery) {
     const batInd = document.getElementById('battery-indicator');
     if (!batInd) return;
@@ -670,174 +787,7 @@ function checkBattery(battery) {
     } else {
         batInd.style.background = "#222"; // Dark grey normally
     }
-}
-
-const batInd = document.getElementById('battery-indicator');
-
-// We use the 'performance' API to see if resources loaded from cache
-/*function checkOfflineReady() {
-    const resources = performance.getEntriesByType("resource");
-    const totalResources = resources.length;
-    
-    // In a real PWA we'd use Service Workers, but for this setup, 
-    // if the page is loaded and resources exist, we are "cached" in memory.
-    if (totalResources > 0) {
-        batInd.style.background = "var(--info-blue)"; // Blue for "System Loaded"
-        batInd.innerText = "ASSETS: CACHED";
-    } else {
-        batInd.style.background = "var(--warning-orange)";
-        batInd.innerText = "ASSETS: LOADING";
-    }
 }*/
-
-function checkOfflineReady() {
-    const batInd = document.getElementById('battery-indicator');
-    const images = document.querySelectorAll('#preloader img');
-    
-    // Count how many images actually finished loading
-    const loadedCount = Array.from(images).filter(img => img.complete).length;
-    const totalCount = allTasks.length;
-
-    if (loadedCount >= totalCount && totalCount > 0) {
-        batInd.style.background = "var(--success-green)";
-        batInd.innerText = "100% READY " + `CACHED: ${loadedCount}/${totalCount}`;
-        //batInd.innerText = "ASSETS: 100% READY";
-    } else {
-        batInd.style.background = "var(--warning-orange)";
-        batInd.innerText = `CACHING: ${loadedCount}/${totalCount}`;
-        
-        // Check again in 1 second if not finished
-        setTimeout(checkOfflineReady, 1000);
-    }
-}
-
-function preloadAssets() {
-    const preloader = document.getElementById('preloader');
-
-    const auditGrid = document.getElementById('visual-audit-grid');
-    auditGrid.innerHTML = ''; // Clear for retry
-    
-    // 1. Preload Task Images
-    allTasks.forEach(task => {
-        if (task.image) {
-            const img = new Image();
-            img.src = "images/" + task.image;
-
-            // Add to hidden preloader for caching
-            preloader.appendChild(img); // Forces Safari to "see" and cache it
-
-            // Add a clone to the visual audit grid for troubleshooting
-            const thumb = img.cloneNode();
-            thumb.style.width = "100%";
-            thumb.style.height = "40px";
-            thumb.style.objectFit = "cover";
-            thumb.style.borderRadius = "4px";
-            thumb.style.border = "1px solid #444";
-            thumb.title = `Task ${index + 1}`;
-            
-            // If the image fails to load, highlight it red
-            thumb.onerror = () => { thumb.style.border = "2px solid var(--error-red)"; };
-            
-            auditGrid.appendChild(thumb);
-        }
-    });
-
-    // 2. Preload UI Icons (Optional)
-    const uiIcons = ['gold-medal.png', 'map-icon.png', 'lock-icon.png'];
-    uiIcons.forEach(src => {
-        const img = new Image();
-        img.src = src;
-        preloader.appendChild(img);
-    });
-
-    console.log("All mission assets requested for cache.");
-}
-
-function retryPreload() {
-    const preloader = document.getElementById('preloader');
-    const batInd = document.getElementById('battery-indicator');
-    
-    // 1. Visual feedback that it's working
-    batInd.style.background = "var(--info-blue)";
-    batInd.innerText = "RETRYING...";
-
-    // 2. Clear existing preloader content
-    preloader.innerHTML = '';
-
-    // 3. Re-run the preload logic
-    allTasks.forEach(task => {
-        if (task.image) {
-            const img = new Image();
-            // Append a "cache-buster" timestamp to force a fresh download from the server
-            img.src = task.image + "?v=" + Date.now(); 
-            preloader.appendChild(img);
-        }
-    });
-
-    // 4. Start monitoring the progress again
-    checkOfflineReady();
-    
-    console.log("Manual Asset Refresh Triggered.");
-}
-
-function runSystemCheck() {
-    const dbInd = document.getElementById('db-indicator');
-    const storInd = document.getElementById('storage-indicator');
-    const offInd = document.getElementById('offline-indicator');
-
-    // 1. Check Photo Database
-    if (db) {
-        dbInd.style.background = "var(--success-green)";
-        dbInd.innerText = "PHOTOS: READY";
-    } else {
-        dbInd.style.background = "var(--error-red)";
-        dbInd.innerText = "PHOTOS: ERROR";
-    }
-
-    // 2. Check Local Storage (Scores)
-    try {
-        localStorage.setItem('health_check', 'ok');
-        localStorage.removeItem('health_check');
-        storInd.style.background = "var(--success-green)";
-        storInd.innerText = "LOGS: ACTIVE";
-    } catch(e) {
-        storInd.style.background = "var(--error-red)";
-        storInd.innerText = "LOGS: BLOCKED";
-    }
-
-    // 3. Check Wifi/Offline Status
-    const updateOnlineStatus = () => {
-        if (navigator.onLine) {
-            offInd.style.background = "#3498db"; // Blue
-            offInd.innerText = "LINK: ONLINE";
-        } else {
-            offInd.style.background = "#f39c12"; // Orange
-            offInd.innerText = "LINK: OFFLINE";
-        }
-    };
-    
-    window.addEventListener('online', updateOnlineStatus);
-    window.addEventListener('offline', updateOnlineStatus);
-    updateOnlineStatus();
-
-    // 4. Battery Check (Bonus)
-    if (navigator.getBattery) {
-        // Keep battery for Laptop testing
-        navigator.getBattery().then(battery => {
-            checkBattery(battery); // Run once on load
-            
-            // Update whenever the battery level or charging status changes
-            battery.onlevelchange = () => checkBattery(battery);
-            battery.onchargingchange = () => checkBattery(battery);
-        });
-    } else {
-        // Fallback if the iPad version is too old to support battery API
-        document.getElementById('battery-indicator').innerText = "BAT: N/A";
-        // iPad/Safari: Show Offline Asset Status
-        checkOfflineReady();
-    }
-    checkOfflineReady();
-}
 
 // Add this to the very bottom of script.js
 window.onload = function() {

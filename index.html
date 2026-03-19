@@ -12,7 +12,6 @@
     
     <link rel="stylesheet" href="style.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-
 </head>
 <body>
 
@@ -25,83 +24,74 @@
         <h1 onclick="handleAdminTap()">🏆 AMAZING RACE</h1>
         <p>Enter your team name to begin.</p>
         <input type="text" id="team-name-input" placeholder="Team Name..." maxlength="20">
-        <button onclick="startRace()" class="btn-main">START RACE</button>
+
+        <div id="pre-race-checklist" style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 10px; margin: 20px auto; border: 1px solid #444; width: 90%; max-width: 400px;">
+            <h3 style="color: var(--gold); margin-bottom: 10px; font-size: 12px; letter-spacing: 1px;">SYSTEM PRE-FLIGHT</h3>
+            
+            <div id="check-assets" style="font-size: 12px; color: #bbb; margin-bottom: 8px;">
+                ○ Mission Assets: <span id="asset-count">0</span> / <span id="asset-total">0</span>
+            </div>
+
+            <div id="visual-audit-grid" style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 5px; min-height: 50px;">
+                </div>
+            
+            <p id="check-msg" style="font-size: 10px; margin-top: 10px; color: #888;">Waiting for assets to cache...</p>
+        </div>
+
+        <button id="start-race-btn" onclick="startRace()" class="btn-main">START RACE</button>
     </div>
 
     <div id="hub-screen" class="screen">
         <h2 id="hub-team-display">MISSION HUB</h2>
         <h1 id="hub-score">Score: 0</h1>
-        
         <div class="progress-container">
             <div id="progress-bar">0%</div>
         </div>
-
         <div id="task-list" class="task-grid"></div>
-
         <button id="finish-btn" onclick="showPitStop()" class="btn-main" style="display:none; margin-bottom: 20px;">🏁 PIT STOP</button>
-
         <button onclick="adminResetTrigger()" class="btn-reset-small">⚠️ ADMIN RESET</button>
     </div>
 
     <div id="task-modal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeModal()">&times;</span>
-            
             <h2 id="modal-title"></h2>
             <p id="modal-desc"></p>
-            
             <img id="modal-image" src="" onclick="zoomImage()" alt="Task Clue">
-
             <div id="photo-proof-section">
-                <p>📸 Take a Team Photo at this location to unlock:</p>
+                <p>📸 Take a Team Photo at this location:</p>
                 <input type="file" accept="image/*" capture="camera" id="task-photo-input" onchange="previewPhoto(event)" style="display:none;">
                 <button onclick="document.getElementById('task-photo-input').click()" class="btn-secondary">OPEN CAMERA</button>
                 <div id="photo-preview-container" style="display:none;">
                     <img id="task-photo-preview">
                 </div>
             </div>
-
             <div id="input-section">
                 <input type="text" id="passcode-input" placeholder="ENTER CODE" autocomplete="off">
                 <button onclick="submitPasscode()" class="btn-main">SUBMIT</button>
                 <button onclick="revealHint()" class="btn-hint">GET HINT (-25 pts)</button>
             </div>
-
             <div id="lockout-section" style="display:none;">
                 <h3 style="color:#ff4444;">🚨 LOCKED</h3>
-                <p>Too many attempts. Wait:</p>
-                <div id="timer-display" class="timer">Lockdown activated</div>
+                <p>Wait: <span id="timer-display"></span></p>
             </div>
         </div>
     </div>
 
     <div id="pit-stop-screen" class="screen" style="display:none;">
         <h1 style="color: var(--gold); text-align: center; margin-top: 20px;">RACE COMPLETE</h1>
-        
         <div class="final-stats-header" style="text-align: center; margin-bottom: 30px;">
-            <h2 id="final-team-name" style="margin-bottom: 5px;"></h2>
-            <div id="final-time-display" style="font-size: 1.2rem; color: #aaa;"></div>
+            <h2 id="final-team-name"></h2>
+            <div id="final-time-display"></div>
             <div style="font-size: 2rem; font-weight: bold; color: var(--gold); margin-top: 10px;">
                 TOTAL: <span id="final-total-points">0</span> PTS
             </div>
         </div>
-
         <div id="station-breakdown" class="results-list"></div>
-
-        <div style="margin-top: 40px; padding-bottom: 50px; display: flex; flex-direction: column; gap: 15px;">
-            <button onclick="downloadPDF()" class="btn-main" style="background: #b8860b; color: white;">
-                🏁 DOWNLOAD PDF REPORT
-            </button>
-
-            <button onclick="downloadResults()" class="btn-report">
-                📄 SAVE TEXT LOG (.TXT)
-            </button>
-
-            <button onclick="adminResetTrigger()" class="btn-reset" style="opacity: 0.3; margin-top: 20px;">
-                ⚠️ ADMIN RESET
-            </button>
+        <div style="margin: 30px 0; display: flex; flex-direction: column; gap: 15px;">
+            <button onclick="downloadPDF()" class="btn-main" style="background: #b8860b;">🏁 DOWNLOAD PDF REPORT</button>
+            <button onclick="downloadResults()" class="btn-report">📄 SAVE TEXT LOG (.TXT)</button>
         </div>
-
     </div>
 
     <div id="image-overlay" onclick="closeZoom()">
@@ -109,32 +99,16 @@
         <p class="overlay-close-hint">Tap anywhere to close</p>
     </div>
 
-    <script src="tasks.js"></script>
-    <script src="script.js"></script>
-    <script>
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('./sw.js?v=15').then(() => console.log("SW Active"));
-        }
-    </script>
-
-    <!--Status bar -->
-    <div id="debug-status-bar" style="position: fixed; bottom: 0; left: 0; width: 100%; height: 25px; display: flex; z-index: 10001; font-family: sans-serif; font-size: 10px; font-weight: bold; text-transform: uppercase; color: white; pointer-events: none; opacity: 0.9;">
+    <div id="debug-status-bar" style="position: fixed; bottom: 0; left: 0; width: 100%; height: 25px; display: flex; z-index: 10001; font-family: sans-serif; font-size: 10px; font-weight: bold; text-transform: uppercase; color: white; opacity: 0.9;">
         <div id="db-indicator" onclick="adminBypass()" style="flex: 1; display: flex; align-items: center; justify-content: center; background: #444; cursor: pointer; pointer-events: auto;">PHOTOS: READY</div>
         <div id="storage-indicator" style="flex: 1; display: flex; align-items: center; justify-content: center; background: #444; border-left: 1px solid rgba(255,255,255,0.1);">LOGS: ACTIVE</div>
         <div id="offline-indicator" style="flex: 1; display: flex; align-items: center; justify-content: center; background: #444; border-left: 1px solid rgba(255,255,255,0.1);">LINK: ONLINE</div>
-        <div id="battery-indicator" style="flex: 0.7; display: flex; align-items: center; justify-content: center; background: #222; border-left: 1px solid rgba(255,255,255,0.1);">BAT: --%</div>
-    </div>
-
-    <div id="battery-indicator" 
-        onclick="retryPreload()" 
-        style="flex: 1; display: flex; align-items: center; justify-content: center; background: #222; border-left: 1px solid rgba(255,255,255,0.1); cursor: pointer; pointer-events: auto;">
-        ASSETS: --%
+        <div id="asset-status-bar" onclick="retryPreload()" style="flex: 1; display: flex; align-items: center; justify-content: center; background: #222; border-left: 1px solid rgba(255,255,255,0.1); cursor: pointer; pointer-events: auto;">ASSETS: --%</div>
     </div>
 
     <div id="preloader" style="display:none;" aria-hidden="true"></div>
 
-    <div id="visual-audit-grid" style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; margin-top: 15px; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 8px; max-height: 150px; overflow-y: auto;">
-    </div>
-    
+    <script src="tasks.js"></script>
+    <script src="script.js"></script>
 </body>
 </html>
