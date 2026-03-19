@@ -1,4 +1,16 @@
-:root { --gold: #ffde00; --dark: #121212; --card: #1e1e1e; }
+:root {
+    /* Main Theme Colors */
+    --gold: #ffde00; 
+    --dark: #121212; 
+    --card: #1e1e1e; 
+
+    /* Status Colors */
+    --success-green: #27ae60;  /* Professional Emerald Green */
+    --error-red: #c0392b;      /* Darker, readable Red */
+    --info-blue: #2980b9;       /* Link/Online Blue */
+    --warning-orange: #f39c12;  /* Offline/Warning Orange */
+
+}
 body { margin: 0; background: var(--dark); color: white; font-family: sans-serif; -webkit-user-select: none; }
 
 .screen { display: none; padding: 60px; flex-direction: column; align-items: center; min-height: 100vh; }

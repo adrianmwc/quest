@@ -15,9 +15,21 @@ let taskCompletionTimes = JSON.parse(localStorage.getItem('taskCompletionTimes')
 
 // Initialize IndexedDB for Photos
 const req = indexedDB.open("RacePhotoLog", 1);
-req.onupgradeneeded = e => { e.target.result.createObjectStore("photos", { keyPath: "taskId" }); };
+
+req.onupgradeneeded = (e) => {
+    db = e.target.result;
+    if (!db.objectStoreNames.contains("photos")) {
+        db.createObjectStore("photos", { keyPath: "taskId" });
+    }
+};
+
 req.onsuccess = e => { 
     db = e.target.result; 
+
+    console.log("Database Opened Successfully");
+    // RE-RUN THE CHECK ONCE OPENED
+    runSystemCheck();
+
     // This was likely the bottleneck. 
     // We now check if a race is ALREADY in progress.
     if(teamName && startTime) {
@@ -25,6 +37,11 @@ req.onsuccess = e => {
     } else {
         showWelcomeScreen();
     }
+};
+
+req.onerror = (e) => {
+    console.error("Database Error:", e.target.error);
+    runSystemCheck(); // This will now correctly show RED
 };
 
 // Add this helper function to ensure the welcome screen is forced visible
@@ -652,15 +669,22 @@ function adminBypass() {
 }
 
 function checkBattery(battery) {
-    const statusContent = document.getElementById('debug-status-bar');
-    if (!statusContent) return;
+    const batInd = document.getElementById('battery-indicator');
+    if (!batInd) return;
 
-    // If battery is 20% or lower and NOT charging
+    // Convert decimal (0.85) to percentage (85%)
+    const level = Math.round(battery.level * 100);
+    const isCharging = battery.charging ? "⚡" : "";
+    
+    batInd.innerText = `BAT: ${level}% ${isCharging}`;
+
+    // Color Logic for Battery Segment
     if (battery.level <= 0.20 && !battery.charging) {
-        statusContent.style.background = "rgba(255, 0, 0, 0.9)"; // Turn bar deep red
-        console.warn("CRITICAL: Battery Low - Race Timer Throttling Possible");
+        batInd.style.background = "var(--error-red)"; // Red if low
+    } else if (battery.charging) {
+        batInd.style.background = "#27ae60"; // Green if charging
     } else {
-        statusContent.style.background = "rgba(0, 0, 0, 0.8)"; // Return to normal semi-transparent black
+        batInd.style.background = "#222"; // Dark grey normally
     }
 }
 
@@ -707,13 +731,15 @@ function runSystemCheck() {
     // 4. Battery Check (Bonus)
     if (navigator.getBattery) {
         navigator.getBattery().then(battery => {
-            // Run once on load
-            checkBattery(battery);
-
-            // Listen for changes (unplugging or dropping levels)
-            battery.addEventListener('levelchange', () => checkBattery(battery));
-            battery.addEventListener('chargingchange', () => checkBattery(battery));
+            checkBattery(battery); // Run once on load
+            
+            // Update whenever the battery level or charging status changes
+            battery.onlevelchange = () => checkBattery(battery);
+            battery.onchargingchange = () => checkBattery(battery);
         });
+    } else {
+        // Fallback if the iPad version is too old to support battery API
+        document.getElementById('battery-indicator').innerText = "BAT: N/A";
     }
 }
 
