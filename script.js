@@ -713,13 +713,32 @@ function checkOfflineReady() {
 
 function preloadAssets() {
     const preloader = document.getElementById('preloader');
+
+    const auditGrid = document.getElementById('visual-audit-grid');
+    auditGrid.innerHTML = ''; // Clear for retry
     
     // 1. Preload Task Images
     allTasks.forEach(task => {
         if (task.image) {
             const img = new Image();
-            img.src = task.image;
+            img.src = "images/" + task.image;
+
+            // Add to hidden preloader for caching
             preloader.appendChild(img); // Forces Safari to "see" and cache it
+
+            // Add a clone to the visual audit grid for troubleshooting
+            const thumb = img.cloneNode();
+            thumb.style.width = "100%";
+            thumb.style.height = "40px";
+            thumb.style.objectFit = "cover";
+            thumb.style.borderRadius = "4px";
+            thumb.style.border = "1px solid #444";
+            thumb.title = `Task ${index + 1}`;
+            
+            // If the image fails to load, highlight it red
+            thumb.onerror = () => { thumb.style.border = "2px solid var(--error-red)"; };
+            
+            auditGrid.appendChild(thumb);
         }
     });
 
