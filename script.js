@@ -700,7 +700,8 @@ function checkOfflineReady() {
 
     if (loadedCount >= totalCount && totalCount > 0) {
         batInd.style.background = "var(--success-green)";
-        batInd.innerText = "ASSETS: 100% READY";
+        batInd.innerText = "100% READY " + `CACHED: ${loadedCount}/${totalCount}`;
+        //batInd.innerText = "ASSETS: 100% READY";
     } else {
         batInd.style.background = "var(--warning-orange)";
         batInd.innerText = `CACHING: ${loadedCount}/${totalCount}`;
@@ -731,6 +732,33 @@ function preloadAssets() {
     });
 
     console.log("All mission assets requested for cache.");
+}
+
+function retryPreload() {
+    const preloader = document.getElementById('preloader');
+    const batInd = document.getElementById('battery-indicator');
+    
+    // 1. Visual feedback that it's working
+    batInd.style.background = "var(--info-blue)";
+    batInd.innerText = "RETRYING...";
+
+    // 2. Clear existing preloader content
+    preloader.innerHTML = '';
+
+    // 3. Re-run the preload logic
+    allTasks.forEach(task => {
+        if (task.image) {
+            const img = new Image();
+            // Append a "cache-buster" timestamp to force a fresh download from the server
+            img.src = task.image + "?v=" + Date.now(); 
+            preloader.appendChild(img);
+        }
+    });
+
+    // 4. Start monitoring the progress again
+    checkOfflineReady();
+    
+    console.log("Manual Asset Refresh Triggered.");
 }
 
 function runSystemCheck() {
@@ -789,6 +817,7 @@ function runSystemCheck() {
         // iPad/Safari: Show Offline Asset Status
         checkOfflineReady();
     }
+    checkOfflineReady();
 }
 
 // Add this to the very bottom of script.js
