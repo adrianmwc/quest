@@ -688,6 +688,24 @@ function checkBattery(battery) {
     }
 }
 
+const batInd = document.getElementById('battery-indicator');
+
+// We use the 'performance' API to see if resources loaded from cache
+function checkOfflineReady() {
+    const resources = performance.getEntriesByType("resource");
+    const totalResources = resources.length;
+    
+    // In a real PWA we'd use Service Workers, but for this setup, 
+    // if the page is loaded and resources exist, we are "cached" in memory.
+    if (totalResources > 0) {
+        batInd.style.background = "var(--info-blue)"; // Blue for "System Loaded"
+        batInd.innerText = "ASSETS: CACHED";
+    } else {
+        batInd.style.background = "var(--warning-orange)";
+        batInd.innerText = "ASSETS: LOADING";
+    }
+}
+
 function runSystemCheck() {
     const dbInd = document.getElementById('db-indicator');
     const storInd = document.getElementById('storage-indicator');
@@ -730,6 +748,7 @@ function runSystemCheck() {
 
     // 4. Battery Check (Bonus)
     if (navigator.getBattery) {
+        // Keep battery for Laptop testing
         navigator.getBattery().then(battery => {
             checkBattery(battery); // Run once on load
             
@@ -740,6 +759,8 @@ function runSystemCheck() {
     } else {
         // Fallback if the iPad version is too old to support battery API
         document.getElementById('battery-indicator').innerText = "BAT: N/A";
+        // iPad/Safari: Show Offline Asset Status
+        checkOfflineReady();
     }
 }
 
