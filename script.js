@@ -628,22 +628,6 @@ function startLiveTimer() {
     }, 1000);
 }
 
-// Add this to the very bottom of script.js
-window.onload = function() {
-    // If a race was already started, resume the timer
-    if (startTime && startTime !== "null") {
-        startLiveTimer();
-    }
-};
-
-// This runs automatically whenever the page loads
-window.addEventListener('load', () => {
-    // Check if a race is already underway
-    if (startTime && startTime !== "null" && !completedTasks.includes('finished')) {
-        startLiveTimer();
-    }
-});
-
 function adminBypass() {
     const code = prompt("ENTER ADMIN KEY TO BYPASS RACE:");
     
@@ -691,7 +675,7 @@ function checkBattery(battery) {
 const batInd = document.getElementById('battery-indicator');
 
 // We use the 'performance' API to see if resources loaded from cache
-function checkOfflineReady() {
+/*function checkOfflineReady() {
     const resources = performance.getEntriesByType("resource");
     const totalResources = resources.length;
     
@@ -704,6 +688,49 @@ function checkOfflineReady() {
         batInd.style.background = "var(--warning-orange)";
         batInd.innerText = "ASSETS: LOADING";
     }
+}*/
+
+function checkOfflineReady() {
+    const batInd = document.getElementById('battery-indicator');
+    const images = document.querySelectorAll('#preloader img');
+    
+    // Count how many images actually finished loading
+    const loadedCount = Array.from(images).filter(img => img.complete).length;
+    const totalCount = allTasks.length;
+
+    if (loadedCount >= totalCount && totalCount > 0) {
+        batInd.style.background = "var(--success-green)";
+        batInd.innerText = "ASSETS: 100% READY";
+    } else {
+        batInd.style.background = "var(--warning-orange)";
+        batInd.innerText = `CACHING: ${loadedCount}/${totalCount}`;
+        
+        // Check again in 1 second if not finished
+        setTimeout(checkOfflineReady, 1000);
+    }
+}
+
+function preloadAssets() {
+    const preloader = document.getElementById('preloader');
+    
+    // 1. Preload Task Images
+    allTasks.forEach(task => {
+        if (task.image) {
+            const img = new Image();
+            img.src = task.image;
+            preloader.appendChild(img); // Forces Safari to "see" and cache it
+        }
+    });
+
+    // 2. Preload UI Icons (Optional)
+    const uiIcons = ['gold-medal.png', 'map-icon.png', 'lock-icon.png'];
+    uiIcons.forEach(src => {
+        const img = new Image();
+        img.src = src;
+        preloader.appendChild(img);
+    });
+
+    console.log("All mission assets requested for cache.");
 }
 
 function runSystemCheck() {
@@ -764,8 +791,24 @@ function runSystemCheck() {
     }
 }
 
-// Call it to start the monitoring
-runSystemCheck();
+// Add this to the very bottom of script.js
+window.onload = function() {
+    // If a race was already started, resume the timer
+    if (startTime && startTime !== "null") {
+        startLiveTimer();
+    }
+    preloadAssets();
+    // Call it to start the monitoring
+    runSystemCheck();
+};
+
+// This runs automatically whenever the page loads
+window.addEventListener('load', () => {
+    // Check if a race is already underway
+    if (startTime && startTime !== "null" && !completedTasks.includes('finished')) {
+        startLiveTimer();
+    }
+});
 
 // Call this immediately at the bottom of script.js to be safe
 showWelcomeScreen();

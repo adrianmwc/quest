@@ -5,8 +5,8 @@
     --card: #1e1e1e; 
 
     /* Status Colors */
-    --success-green: #27ae60;  /* Professional Emerald Green */
-    --error-red: #c0392b;      /* Darker, readable Red */
+    --success-green: #2ecc71;  /* Professional Emerald Green #27ae6 */
+    --error-red:  #e74c3c ;    /* Darker, readable Red #c0392b */
     --info-blue: #2980b9;       /* Link/Online Blue */
     --warning-orange: #f39c12;  /* Offline/Warning Orange */
 
